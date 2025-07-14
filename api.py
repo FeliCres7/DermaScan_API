@@ -20,8 +20,8 @@ app.add_middleware(
 )
 
 class InputData(BaseModel):
-    image_url: HttpUrl | None = None
-    number: int | None = None
+    fotos: HttpUrl | None = None
+    diametro: int | None = None
 
 @app.post("/predict")
 async def predict(data: InputData):
@@ -29,16 +29,16 @@ async def predict(data: InputData):
     number_risk = None
     general_risk = None
 
-    if data.image_url:
+    if data.fotos:
         try:
-            response = requests.get(data.image_url)
+            response = requests.get(data.fotos)
             response.raise_for_status()
             Image.open(io.BytesIO(response.content))  # validar imagen
             image_risk = random.randint(0, 99)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error al procesar la imagen: {e}")
 
-    if data.number is not None:
+    if data.diametro is not None:
         number_risk = random.randint(0, 99)
 
     if image_risk is not None and number_risk is not None:
