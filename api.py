@@ -44,8 +44,13 @@ async def predict(data: InputData):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error al procesar la imagen: {e}")
 
-    if data.diametro is not None:
-        number_risk = random.randint(0, 99)
+    try:
+        if data.diametro is not None:
+            diametro = int(data.diametro)  # fuerza casteo
+            number_risk = random.randint(0, 99)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="El diámetro debe ser un número entero válido")
+
 
     if image_risk is not None and number_risk is not None:
         general_risk = random.randint(0, 99)
