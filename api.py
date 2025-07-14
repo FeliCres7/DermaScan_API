@@ -7,8 +7,6 @@ import io
 import random
 import base64
 
-# pip install fastapi uvicorn requests Pillow
-
 app = FastAPI()
 
 app.add_middleware(
@@ -20,7 +18,7 @@ app.add_middleware(
 )
 
 class InputData(BaseModel):
-    fotos: str | None = None  
+    image: str | None = None  # Acepta base64 o URL
     diametro: int | None = None
 
 @app.post("/predict")
@@ -29,17 +27,19 @@ async def predict(data: InputData):
     number_risk = None
     general_risk = None
 
-    
-    if data.fotos:
+    if data.image:
         try:
-            
-            if "," in data.fotos:
-                base64_data = data.fotos.split(",", 1)[1]
+            if data.image.startswith("http"):
+                # URL: descargar imagen
+                response = requests.get(data.image)
+                response.raise_for_status()
+                image_data = response.content
             else:
-                base64_data = data.fotos
+                # Base64: limpiar prefijo si lo tiene
+                base64_data = data.image.split(",", 1)[1] if "," in data.image else data.image
+                image_data = base64.b64decode(base64_data)
 
-            image_data = base64.b64decode(base64_data)
-            Image.open(io.BytesIO(image_data))  
+            Image.open(io.BytesIO(image_data))  # Validar imagen
             image_risk = random.randint(0, 99)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error al procesar la imagen: {e}")
