@@ -1,26 +1,26 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 import requests
 from PIL import Image
 import io
 import random
+import base64
 
 # pip install fastapi uvicorn requests Pillow
-
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 class InputData(BaseModel):
-    fotos: HttpUrl | None = None
+    fotos: str | None = None  
     diametro: int | None = None
 
 @app.post("/predict")
@@ -29,11 +29,17 @@ async def predict(data: InputData):
     number_risk = None
     general_risk = None
 
+    
     if data.fotos:
         try:
-            response = requests.get(data.fotos)
-            response.raise_for_status()
-            Image.open(io.BytesIO(response.content))  # validar imagen
+            
+            if "," in data.fotos:
+                base64_data = data.fotos.split(",", 1)[1]
+            else:
+                base64_data = data.fotos
+
+            image_data = base64.b64decode(base64_data)
+            Image.open(io.BytesIO(image_data))  
             image_risk = random.randint(0, 99)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error al procesar la imagen: {e}")
