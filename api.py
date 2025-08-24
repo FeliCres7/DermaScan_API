@@ -95,9 +95,9 @@ async def predict(data: InputData):
             pred_general = None
 
         resultado = {
-            "prediccion_imagen": round(pred_img, 2) if data.image_url else None,
-            "prediccion_diametro": round(pred_diam, 2) if data.number is not None else None,
-            "prediccion_general": round(pred_general, 2) if pred_general is not None else None,
+            "riesgo_según_imagen": round(pred_img, 2) if data.image_url else None,
+            "riesgo_según_diametro": round(pred_diam, 2) if data.number is not None else None,
+            "riesgo_general": round(pred_general, 2) if pred_general is not None else None,
         }
 
         logging.info(f"Resultado final: {resultado}")
