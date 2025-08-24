@@ -8,7 +8,6 @@ from PIL import Image
 import requests
 import io
 import os
-from sklearn.preprocessing import MinMaxScaler
 
 # Inicializar FastAPI
 app = FastAPI()
@@ -32,10 +31,8 @@ model_img = load_model(MODEL_IMG_PATH)
 model_diam = load_model(MODEL_DIAM_PATH)
 modelo_general = load_model(MODEL_GENERAL_PATH)
 
-scaler = MinMaxScaler()
-min_diameter, max_diameter = 0.5, 50.0  # <--- ajusta según tu dataset
-scaler.min_ = np.array([min_diameter])
-scaler.scale_ = np.array([max_diameter - min_diameter])
+# Rango de diámetros en tu dataset
+min_diameter, max_diameter = 0.5, 50.0  
 
 # Formato de entrada
 class InputData(BaseModel):
@@ -60,14 +57,19 @@ async def predict(data: InputData):
 
         if data.image_url:
             img_arr = load_image_from_url(str(data.image_url))
-            image_risk = float(model_img.predict(img_arr)[0][0])
+            image_risk = float(model_img.predict(img_arr)[0][0]) * 99
+            image_risk = float(np.clip(image_risk, 0, 99))
 
         if data.number is not None:
-            num_scaled = scaler.transform(np.array([[data.number]]))
-            number_risk = float(model_diam.predict(num_scaled)[0][0])
+            # Escalado manual
+            num_scaled = (data.number - min_diameter) / (max_diameter - min_diameter)
+            num_scaled = np.array([[num_scaled]])
+            number_risk = float(model_diam.predict(num_scaled)[0][0]) * 99
+            number_risk = float(np.clip(number_risk, 0, 99))
 
         if data.image_url and data.number is not None:
-            general_risk = float(modelo_general.predict([img_arr, num_scaled])[0][0])
+            general_risk = float(modelo_general.predict([img_arr, num_scaled])[0][0]) * 99
+            general_risk = float(np.clip(general_risk, 0, 99))
 
         return {
             "riesgo_según_imagen": image_risk,
