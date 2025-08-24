@@ -32,11 +32,10 @@ model_img = load_model(MODEL_IMG_PATH)
 model_diam = load_model(MODEL_DIAM_PATH)
 modelo_general = load_model(MODEL_GENERAL_PATH)
 
-# Inicializar scaler para los diámetros
 scaler = MinMaxScaler()
-# Aquí se ponen los valores mínimos y máximos que tuviste en entrenamiento
-# Ajusta si sabes los valores reales de tus datos
-scaler.min_, scaler.scale_ = np.array([0.0]), np.array([1.0])
+min_diameter, max_diameter = 0.5, 50.0  # <--- ajusta según tu dataset
+scaler.min_ = np.array([min_diameter])
+scaler.scale_ = np.array([max_diameter - min_diameter])
 
 # Formato de entrada
 class InputData(BaseModel):
