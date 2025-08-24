@@ -44,8 +44,8 @@ min_diameter, max_diameter = 0.5, 50.0
 
 # Formato de entrada
 class InputData(BaseModel):
-    image_url: HttpUrl | None = None
-    number: float | None = None
+    fotos: HttpUrl | None = None
+    diametro: float | None = None
 
 # Función auxiliar para cargar imagen
 def load_image_from_url(url):
@@ -62,12 +62,12 @@ async def predict(data: InputData):
         img_arr = None
         num_scaled = None
 
-        logging.info(f"Datos recibidos: image_url={data.image_url}, number={data.number}")
+        logging.info(f"Datos recibidos: fotos={data.fotos}, diametro={data.diametro}")
 
         # Procesamiento de la imagen
-        if data.image_url:
+        if data.fotos:
             logging.info("Procesando imagen desde URL...")
-            response = requests.get(data.image_url)
+            response = requests.get(data.fotos)
             response.raise_for_status()
             image = Image.open(io.BytesIO(response.content)).convert("RGB")
             image = image.resize((224, 224))
@@ -78,15 +78,15 @@ async def predict(data: InputData):
             pred_img = float(raw_img_pred * 99)
 
         # Procesamiento del número (diámetro)
-        if data.number is not None:
-            logging.info(f"Escalando número {data.number} con rango ({min_diameter}, {max_diameter})")
-            num_scaled = np.array([[(data.number - min_diameter) / (max_diameter - min_diameter)]])
+        if data.diametro is not None:
+            logging.info(f"Escalando número {data.diametro} con rango ({min_diameter}, {max_diameter})")
+            num_scaled = np.array([[(data.diametro - min_diameter) / (max_diameter - min_diameter)]])
             raw_diam_pred = model_diam.predict(num_scaled)[0][0]
             logging.info(f"Predicción cruda diámetro: {raw_diam_pred}")
             pred_diam = float(raw_diam_pred * 99)
 
         # Predicción combinada
-        if data.image_url and data.number is not None:
+        if data.fotos and data.diametro is not None:
             logging.info("Ejecutando predicción general con imagen + número...")
             raw_gen_pred = modelo_general.predict([img_arr, num_scaled])[0][0]
             logging.info(f"Predicción cruda general: {raw_gen_pred}")
@@ -95,8 +95,8 @@ async def predict(data: InputData):
             pred_general = None
 
         resultado = {
-            "riesgo_según_imagen": round(pred_img, 2) if data.image_url else None,
-            "riesgo_según_diametro": round(pred_diam, 2) if data.number is not None else None,
+            "riesgo_según_imagen": round(pred_img, 2) if data.fotos else None,
+            "riesgo_según_diametro": round(pred_diam, 2) if data.diametro is not None else None,
             "riesgo_general": round(pred_general, 2) if pred_general is not None else None,
         }
 
