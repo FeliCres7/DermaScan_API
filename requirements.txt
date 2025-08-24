@@ -5,3 +5,5 @@ pillow
 tensorflow
 requests
 gdown
+scikit-learn
+keras
