@@ -45,7 +45,7 @@ min_diameter, max_diameter = 0.5, 50.0
 
 # Formato de entrada
 class InputData(BaseModel):
-    fotos: str | None = None  # URL o base64
+    image: str | None = None  # URL o base64
     diametro: float | None = None
 
 # Función auxiliar para procesar imagen
@@ -73,12 +73,12 @@ async def predict(data: InputData):
         img_arr = None
         num_scaled = None
 
-        logging.info(f"Datos recibidos: fotos={'presente' if data.fotos else None}, diametro={data.diametro}")
+        logging.info(f"Datos recibidos: image={'presente' if data.image else None}, diametro={data.diametro}")
 
         # Procesar imagen
-        if data.fotos:
+        if data.image:
             logging.info("Procesando imagen...")
-            img_arr = process_image(data.fotos)
+            img_arr = process_image(data.image)
             raw_img_pred = model_img.predict(img_arr)[0][0]
             logging.info(f"Predicción cruda imagen: {raw_img_pred}")
             pred_img = float(raw_img_pred * 99)
