@@ -26,6 +26,7 @@ def download_model_gdrive(file_id, zip_path, extract_to):
         print(f"Descargando {extract_to} desde Google Drive...")
         url = f"https://drive.google.com/uc?export=download&id={file_id}"
         r = requests.get(url)
+        r.raise_for_status()
         with open(zip_path, "wb") as f:
             f.write(r.content)
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
@@ -38,24 +39,24 @@ download_model_gdrive("1vWyH3IJXVe9vV-XgtZn0Rbt3YrGxsOE6", "modelo_imagen.zip", 
 download_model_gdrive("1v3UjiUkyTCUiZuKopGm113DMaEuGyr2a", "modelo_diametro.zip", "modelo_diametro.keras")
 download_model_gdrive("1nhZORXhSgCo06xIR7ZmAUrmBHVkf08oS", "modelo_dermascan.zip", "modelo_dermascan.keras")
 
-# --- Cargar modelos ---
-cnn_image_model = tf.keras.models.load_model("cnn_image_model.keras")
-diameter_model = tf.keras.models.load_model("diameter_model.keras")
-combined_model = tf.keras.models.load_model("combined_model.keras")
+# --- Cargar modelos con nombres correctos ---
+cnn_image_model = tf.keras.models.load_model("modelo_imagen.keras")
+diameter_model = tf.keras.models.load_model("modelo_diametro.keras")
+combined_model = tf.keras.models.load_model("modelo_dermascan.keras")
 
 # --- Clase para recibir los datos ---
 class InputData(BaseModel):
-    image: str | None = None  # Acepta base64 o URL
+    image: str | None = None  # base64 o URL
     diametro: int | None = None
 
-# --- Función para procesar imagen ---
+# --- Preprocesamiento de imagen ---
 def preprocess_image(image_data):
     img = Image.open(io.BytesIO(image_data)).convert("RGB")
     img = img.resize((128, 128))
-    img_array = np.array(img) / 255.0
+    img_array = np.array(img, dtype=np.float32) / 255.0
     return np.expand_dims(img_array, axis=0)
 
-# --- Función para limitar riesgo entre 1 y 99 ---
+# --- Limitar riesgo entre 1 y 99 ---
 def clip_risk(value):
     return float(np.clip(value, 1, 99))
 
@@ -83,17 +84,20 @@ async def predict(data: InputData):
             raise HTTPException(status_code=400, detail=f"Error al procesar la imagen: {e}")
 
     # Riesgo según diámetro
-    try:
-        if data.diametro is not None:
-            diametro = np.array([[data.diametro]], dtype=np.float32)
-            number_risk = clip_risk(diameter_model.predict(diametro)[0][0] * 100)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="El diámetro debe ser un número entero válido")
+    if data.diametro is not None:
+        try:
+            diametro_array = np.array([[data.diametro]], dtype=np.float32)
+            number_risk = clip_risk(diameter_model.predict(diametro_array)[0][0] * 100)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="El diámetro debe ser un número entero válido")
 
-    # Riesgo general
+    # Riesgo combinado
     if image_risk is not None and number_risk is not None:
-        general_input = [np.array([[data.diametro]], dtype=np.float32), img_array]
-        general_risk = clip_risk(combined_model.predict(general_input)[0][0] * 100)
+        try:
+            general_input = [diametro_array, img_array]
+            general_risk = clip_risk(combined_model.predict(general_input)[0][0] * 100)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error en predicción combinada: {e}")
 
     return {
         "riesgo_según_imagen": image_risk,
