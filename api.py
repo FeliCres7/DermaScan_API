@@ -34,9 +34,9 @@ def download_model_gdrive(file_id, zip_path, extract_to):
         print(f"{extract_to} listo.")
 
 # --- IDs de los archivos en Google Drive ---
-download_model_gdrive("1vWyH3IJXVe9vV-XgtZn0Rbt3YrGxsOE6", "cnn_image_model.keras.zip", "cnn_image_model.keras")
-download_model_gdrive("1v3UjiUkyTCUiZuKopGm113DMaEuGyr2a", "diameter_model.keras.zip", "diameter_model.keras")
-download_model_gdrive("1nhZORXhSgCo06xIR7ZmAUrmBHVkf08oS", "combined_model.keras.zip", "combined_model.keras")
+download_model_gdrive("1vWyH3IJXVe9vV-XgtZn0Rbt3YrGxsOE6", "modelo_imagen.zip", "modelo_imagen.keras")
+download_model_gdrive("1v3UjiUkyTCUiZuKopGm113DMaEuGyr2a", "modelo_diametro.zip", "modelo_diametro.keras")
+download_model_gdrive("1nhZORXhSgCo06xIR7ZmAUrmBHVkf08oS", "modelo_dermascan.zip", "modelo_dermascan.keras")
 
 # --- Cargar modelos ---
 cnn_image_model = tf.keras.models.load_model("cnn_image_model.keras")
