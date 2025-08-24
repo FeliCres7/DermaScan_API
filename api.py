@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from tensorflow.keras.models import load_model
 import numpy as np
 from PIL import Image
@@ -8,6 +8,7 @@ import requests
 import io
 import os
 import logging
+import base64
 
 # Configuración de logs
 logging.basicConfig(
@@ -44,17 +45,27 @@ min_diameter, max_diameter = 0.5, 50.0
 
 # Formato de entrada
 class InputData(BaseModel):
-    fotos: HttpUrl | None = None
+    fotos: str | None = None  # URL o base64
     diametro: float | None = None
 
-# Función auxiliar para cargar imagen
-def load_image_from_url(url):
-    response = requests.get(url)
-    response.raise_for_status()
-    img = Image.open(io.BytesIO(response.content)).convert("RGB")
-    img = img.resize((224, 224))
-    img_arr = np.array(img) / 255.0
-    return np.expand_dims(img_arr, axis=0)
+# Función auxiliar para procesar imagen
+def process_image(img_input: str):
+    try:
+        if img_input.startswith("http"):
+            response = requests.get(img_input)
+            response.raise_for_status()
+            img = Image.open(io.BytesIO(response.content)).convert("RGB")
+        else:
+            # Base64
+            base64_data = img_input.split(",", 1)[1] if "," in img_input else img_input
+            img_bytes = base64.b64decode(base64_data)
+            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        img = img.resize((224, 224))
+        img_arr = np.array(img) / 255.0
+        return np.expand_dims(img_arr, axis=0)
+    except Exception as e:
+        logging.error(f"Error al procesar la imagen: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Error al procesar la imagen: {e}")
 
 @app.post("/predict")
 async def predict(data: InputData):
@@ -62,32 +73,31 @@ async def predict(data: InputData):
         img_arr = None
         num_scaled = None
 
-        logging.info(f"Datos recibidos: fotos={data.fotos}, diametro={data.diametro}")
+        logging.info(f"Datos recibidos: fotos={'presente' if data.fotos else None}, diametro={data.diametro}")
 
-        # Procesamiento de la imagen
+        # Procesar imagen
         if data.fotos:
-            logging.info("Procesando imagen desde URL...")
-            response = requests.get(data.fotos)
-            response.raise_for_status()
-            image = Image.open(io.BytesIO(response.content)).convert("RGB")
-            image = image.resize((224, 224))
-            img_arr = np.expand_dims(np.array(image) / 255.0, axis=0)
-
+            logging.info("Procesando imagen...")
+            img_arr = process_image(data.fotos)
             raw_img_pred = model_img.predict(img_arr)[0][0]
             logging.info(f"Predicción cruda imagen: {raw_img_pred}")
             pred_img = float(raw_img_pred * 99)
+        else:
+            pred_img = None
 
-        # Procesamiento del número (diámetro)
+        # Procesar número (diámetro)
         if data.diametro is not None:
             logging.info(f"Escalando número {data.diametro} con rango ({min_diameter}, {max_diameter})")
             num_scaled = np.array([[(data.diametro - min_diameter) / (max_diameter - min_diameter)]])
             raw_diam_pred = model_diam.predict(num_scaled)[0][0]
             logging.info(f"Predicción cruda diámetro: {raw_diam_pred}")
             pred_diam = float(raw_diam_pred * 99)
+        else:
+            pred_diam = None
 
         # Predicción combinada
-        if data.fotos and data.diametro is not None:
-            logging.info("Ejecutando predicción general con imagen + número...")
+        if img_arr is not None and num_scaled is not None:
+            logging.info("Ejecutando predicción general...")
             raw_gen_pred = modelo_general.predict([img_arr, num_scaled])[0][0]
             logging.info(f"Predicción cruda general: {raw_gen_pred}")
             pred_general = float(raw_gen_pred * 99)
@@ -95,8 +105,8 @@ async def predict(data: InputData):
             pred_general = None
 
         resultado = {
-            "riesgo_según_imagen": round(pred_img, 2) if data.fotos else None,
-            "riesgo_según_diametro": round(pred_diam, 2) if data.diametro is not None else None,
+            "riesgo_según_imagen": round(pred_img, 2) if pred_img is not None else None,
+            "riesgo_según_diametro": round(pred_diam, 2) if pred_diam is not None else None,
             "riesgo_general": round(pred_general, 2) if pred_general is not None else None,
         }
 
@@ -107,7 +117,6 @@ async def predict(data: InputData):
         logging.error(f"Error en /predict: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-# Para desarrollo local
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("api:app", host="0.0.0.0", port=8000)
