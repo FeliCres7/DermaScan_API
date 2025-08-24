@@ -1,16 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
-import requests
-from PIL import Image
-import io
-import numpy as np
 from tensorflow.keras.models import load_model
-from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.layers import Input
+import numpy as np
+from PIL import Image
+import requests
+import io
 import os
+from sklearn.preprocessing import MinMaxScaler
 
-# Inicializar app
+# Inicializar FastAPI
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,36 +21,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cargar modelos desde el repo (mismo directorio que api.py)
-model_img = load_model("modelo_imagen.keras")
-model_diam = load_model("modelo_diametro.keras")
-modelo_general = load_model("modelo_dermascan.keras")
+# Rutas relativas para Render
+MODEL_DIR = os.path.dirname(os.path.realpath(__file__))
+MODEL_IMG_PATH = os.path.join(MODEL_DIR, "modelo_imagen.keras")
+MODEL_DIAM_PATH = os.path.join(MODEL_DIR, "modelo_diametro.keras")
+MODEL_GENERAL_PATH = os.path.join(MODEL_DIR, "modelo_dermascan.keras")
 
-# Inicializar scaler para diámetro (asumimos rango 0-1, si querés precisión podes guardarlo previamente)
+# Cargar modelos
+model_img = load_model(MODEL_IMG_PATH)
+model_diam = load_model(MODEL_DIAM_PATH)
+modelo_general = load_model(MODEL_GENERAL_PATH)
+
+# Inicializar scaler para los diámetros
 scaler = MinMaxScaler()
-scaler.fit(np.array([[0], [50]]))  # Ajustalo al rango de tus diámetros
+# Aquí se ponen los valores mínimos y máximos que tuviste en entrenamiento
+# Ajusta si sabes los valores reales de tus datos
+scaler.min_, scaler.scale_ = np.array([0.0]), np.array([1.0])
 
 # Formato de entrada
 class InputData(BaseModel):
     image_url: HttpUrl | None = None
-    number: int | None = None
+    number: float | None = None
+
+# Función auxiliar para cargar imagen
+def load_image_from_url(url):
+    response = requests.get(url)
+    response.raise_for_status()
+    img = Image.open(io.BytesIO(response.content)).convert("RGB")
+    img = img.resize((224, 224))
+    img_arr = np.array(img) / 255.0
+    return np.expand_dims(img_arr, axis=0)
 
 @app.post("/predict")
 async def predict(data: InputData):
-    image_risk = None
-    number_risk = None
-    general_risk = None
-
     try:
-        if data.image_url:
-            response = requests.get(str(data.image_url))
-            response.raise_for_status()
-            img = Image.open(io.BytesIO(response.content)).convert("RGB")
-            img = img.resize((224, 224))
-            img_arr = np.array(img) / 255.0
-            img_arr = np.expand_dims(img_arr, axis=0)
+        image_risk = None
+        number_risk = None
+        general_risk = None
 
-            # Predicción solo imagen
+        if data.image_url:
+            img_arr = load_image_from_url(str(data.image_url))
             image_risk = float(model_img.predict(img_arr)[0][0])
 
         if data.number is not None:
@@ -67,6 +79,7 @@ async def predict(data: InputData):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error en predicción: {e}")
 
+# Para desarrollo local
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("api:app", host="0.0.0.0", port=8000)
