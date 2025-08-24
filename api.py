@@ -51,34 +51,41 @@ def load_image_from_url(url):
 @app.post("/predict")
 async def predict(data: InputData):
     try:
-        image_risk = None
-        number_risk = None
-        general_risk = None
+        img_arr = None
+        num_scaled = None
 
         if data.image_url:
-            img_arr = load_image_from_url(str(data.image_url))
-            image_risk = float(model_img.predict(img_arr)[0][0]) * 99
-            image_risk = float(np.clip(image_risk, 0, 99))
+            response = requests.get(data.image_url)
+            response.raise_for_status()
+            image = Image.open(io.BytesIO(response.content)).convert("RGB")
+            image = image.resize((224, 224))
+            img_arr = np.expand_dims(np.array(image) / 255.0, axis=0)
+
+            raw_img_pred = model_img.predict(img_arr)[0][0]
+            print("Predicción cruda imagen:", raw_img_pred)
+            pred_img = float(raw_img_pred * 99)
 
         if data.number is not None:
-            # Escalado manual
-            num_scaled = (data.number - min_diameter) / (max_diameter - min_diameter)
-            num_scaled = np.array([[num_scaled]])
-            number_risk = float(model_diam.predict(num_scaled)[0][0]) * 99
-            number_risk = float(np.clip(number_risk, 0, 99))
+            num_scaled = np.array([[data.number / 100.0]])  
+            raw_diam_pred = model_diam.predict(num_scaled)[0][0]
+            print("Predicción cruda diámetro:", raw_diam_pred)
+            pred_diam = float(raw_diam_pred * 99)
 
         if data.image_url and data.number is not None:
-            general_risk = float(modelo_general.predict([img_arr, num_scaled])[0][0]) * 99
-            general_risk = float(np.clip(general_risk, 0, 99))
+            raw_gen_pred = modelo_general.predict([img_arr, num_scaled])[0][0]
+            print("Predicción cruda general:", raw_gen_pred)
+            pred_general = float(raw_gen_pred * 99)
+        else:
+            pred_general = None
 
         return {
-            "riesgo_según_imagen": image_risk,
-            "riesgo_según_diametro": number_risk,
-            "riesgo_general": general_risk
+            "prediccion_imagen": round(pred_img, 2) if data.image_url else None,
+            "prediccion_diametro": round(pred_diam, 2) if data.number is not None else None,
+            "prediccion_general": round(pred_general, 2) if pred_general is not None else None,
         }
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error en predicción: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Para desarrollo local
 if __name__ == "__main__":
