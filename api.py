@@ -7,6 +7,8 @@ import io
 import base64
 import numpy as np
 import tensorflow as tf
+import os
+import zipfile
 
 app = FastAPI()
 
@@ -18,36 +20,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cargar modelos entrenados (.keras)
+# --- Función para descargar y descomprimir modelos desde Google Drive ---
+def download_model_gdrive(file_id, zip_path, extract_to):
+    if not os.path.exists(extract_to):
+        print(f"Descargando {extract_to} desde Google Drive...")
+        url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        r = requests.get(url)
+        with open(zip_path, "wb") as f:
+            f.write(r.content)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(extract_to)
+        os.remove(zip_path)
+        print(f"{extract_to} listo.")
+
+# --- IDs de los archivos en Google Drive ---
+download_model_gdrive("1vWyH3IJXVe9vV-XgtZn0Rbt3YrGxsOE6", "cnn_image_model.keras.zip", "cnn_image_model.keras")
+download_model_gdrive("1v3UjiUkyTCUiZuKopGm113DMaEuGyr2a", "diameter_model.keras.zip", "diameter_model.keras")
+download_model_gdrive("1nhZORXhSgCo06xIR7ZmAUrmBHVkf08oS", "combined_model.keras.zip", "combined_model.keras")
+
+# --- Cargar modelos ---
 cnn_image_model = tf.keras.models.load_model("cnn_image_model.keras")
 diameter_model = tf.keras.models.load_model("diameter_model.keras")
 combined_model = tf.keras.models.load_model("combined_model.keras")
 
+# --- Clase para recibir los datos ---
 class InputData(BaseModel):
     image: str | None = None  # Acepta base64 o URL
     diametro: int | None = None
 
-
+# --- Función para procesar imagen ---
 def preprocess_image(image_data):
-    """Convierte la imagen en array normalizado para la CNN"""
     img = Image.open(io.BytesIO(image_data)).convert("RGB")
-    img = img.resize((128, 128))  # mismo tamaño que usaste en el entrenamiento
+    img = img.resize((128, 128))
     img_array = np.array(img) / 255.0
     return np.expand_dims(img_array, axis=0)
 
-
+# --- Función para limitar riesgo entre 1 y 99 ---
 def clip_risk(value):
-    """Limita el riesgo entre 1 y 99"""
     return float(np.clip(value, 1, 99))
 
-
+# --- Endpoint de predicción ---
 @app.post("/predict")
 async def predict(data: InputData):
     image_risk = None
     number_risk = None
     general_risk = None
 
-    # --- Riesgo según imagen ---
+    # Riesgo según imagen
     if data.image:
         try:
             if data.image.startswith("http"):
@@ -59,11 +78,11 @@ async def predict(data: InputData):
                 image_data = base64.b64decode(base64_data)
 
             img_array = preprocess_image(image_data)
-            image_risk = clip_risk(cnn_image_model.predict(img_array)[0][0] * 100)  # Escalamos a porcentaje
+            image_risk = clip_risk(cnn_image_model.predict(img_array)[0][0] * 100)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error al procesar la imagen: {e}")
 
-    # --- Riesgo según diámetro ---
+    # Riesgo según diámetro
     try:
         if data.diametro is not None:
             diametro = np.array([[data.diametro]], dtype=np.float32)
@@ -71,7 +90,7 @@ async def predict(data: InputData):
     except ValueError:
         raise HTTPException(status_code=400, detail="El diámetro debe ser un número entero válido")
 
-    # --- Riesgo general (modelo combinado) ---
+    # Riesgo general
     if image_risk is not None and number_risk is not None:
         general_input = [np.array([[data.diametro]], dtype=np.float32), img_array]
         general_risk = clip_risk(combined_model.predict(general_input)[0][0] * 100)
@@ -82,7 +101,7 @@ async def predict(data: InputData):
         "riesgo_general": general_risk
     }
 
-
+# --- Ejecutar API ---
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
