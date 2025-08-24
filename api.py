@@ -2,12 +2,18 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 from tensorflow.keras.models import load_model
-from tensorflow.keras.layers import Input
 import numpy as np
 from PIL import Image
 import requests
 import io
 import os
+import logging
+
+# Configuración de logs
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
 # Inicializar FastAPI
 app = FastAPI()
@@ -27,9 +33,11 @@ MODEL_DIAM_PATH = os.path.join(MODEL_DIR, "modelo_diametro.keras")
 MODEL_GENERAL_PATH = os.path.join(MODEL_DIR, "modelo_dermascan.keras")
 
 # Cargar modelos
+logging.info("Cargando modelos...")
 model_img = load_model(MODEL_IMG_PATH)
 model_diam = load_model(MODEL_DIAM_PATH)
 modelo_general = load_model(MODEL_GENERAL_PATH)
+logging.info("Modelos cargados correctamente.")
 
 # Rango de diámetros en tu dataset
 min_diameter, max_diameter = 0.5, 50.0  
@@ -54,7 +62,11 @@ async def predict(data: InputData):
         img_arr = None
         num_scaled = None
 
+        logging.info(f"Datos recibidos: image_url={data.image_url}, number={data.number}")
+
+        # Procesamiento de la imagen
         if data.image_url:
+            logging.info("Procesando imagen desde URL...")
             response = requests.get(data.image_url)
             response.raise_for_status()
             image = Image.open(io.BytesIO(response.content)).convert("RGB")
@@ -62,29 +74,37 @@ async def predict(data: InputData):
             img_arr = np.expand_dims(np.array(image) / 255.0, axis=0)
 
             raw_img_pred = model_img.predict(img_arr)[0][0]
-            print("Predicción cruda imagen:", raw_img_pred)
+            logging.info(f"Predicción cruda imagen: {raw_img_pred}")
             pred_img = float(raw_img_pred * 99)
 
+        # Procesamiento del número (diámetro)
         if data.number is not None:
-            num_scaled = np.array([[data.number / 100.0]])  
+            logging.info(f"Escalando número {data.number} con rango ({min_diameter}, {max_diameter})")
+            num_scaled = np.array([[(data.number - min_diameter) / (max_diameter - min_diameter)]])
             raw_diam_pred = model_diam.predict(num_scaled)[0][0]
-            print("Predicción cruda diámetro:", raw_diam_pred)
+            logging.info(f"Predicción cruda diámetro: {raw_diam_pred}")
             pred_diam = float(raw_diam_pred * 99)
 
+        # Predicción combinada
         if data.image_url and data.number is not None:
+            logging.info("Ejecutando predicción general con imagen + número...")
             raw_gen_pred = modelo_general.predict([img_arr, num_scaled])[0][0]
-            print("Predicción cruda general:", raw_gen_pred)
+            logging.info(f"Predicción cruda general: {raw_gen_pred}")
             pred_general = float(raw_gen_pred * 99)
         else:
             pred_general = None
 
-        return {
+        resultado = {
             "prediccion_imagen": round(pred_img, 2) if data.image_url else None,
             "prediccion_diametro": round(pred_diam, 2) if data.number is not None else None,
             "prediccion_general": round(pred_general, 2) if pred_general is not None else None,
         }
 
+        logging.info(f"Resultado final: {resultado}")
+        return resultado
+
     except Exception as e:
+        logging.error(f"Error en /predict: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 # Para desarrollo local
