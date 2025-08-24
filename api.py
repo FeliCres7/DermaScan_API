@@ -7,8 +7,7 @@ import io
 import base64
 import numpy as np
 import tensorflow as tf
-import os
-import zipfile
+import gdown  
 
 app = FastAPI()
 
@@ -20,26 +19,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Función para descargar y descomprimir modelos desde Google Drive ---
-def download_model_gdrive(file_id, zip_path, extract_to):
-    if not os.path.exists(extract_to):
-        print(f"Descargando {extract_to} desde Google Drive...")
-        url = f"https://drive.google.com/uc?export=download&id={file_id}"
-        r = requests.get(url)
-        r.raise_for_status()
-        with open(zip_path, "wb") as f:
-            f.write(r.content)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(extract_to)
-        os.remove(zip_path)
-        print(f"{extract_to} listo.")
+# --- Función para descargar modelo desde Google Drive ---
+def download_model_gdrive(file_id, output_path):
+    if not tf.io.gfile.exists(output_path):
+        print(f"Descargando {output_path} desde Google Drive...")
+        url = f"https://drive.google.com/uc?id={file_id}"
+        gdown.download(url, output_path, quiet=False)
+        print(f"{output_path} listo.")
 
 # --- IDs de los archivos en Google Drive ---
-download_model_gdrive("1vWyH3IJXVe9vV-XgtZn0Rbt3YrGxsOE6", "modelo_imagen.zip", "modelo_imagen.keras")
-download_model_gdrive("1v3UjiUkyTCUiZuKopGm113DMaEuGyr2a", "modelo_diametro.zip", "modelo_diametro.keras")
-download_model_gdrive("1nhZORXhSgCo06xIR7ZmAUrmBHVkf08oS", "modelo_dermascan.zip", "modelo_dermascan.keras")
+download_model_gdrive("1vWyH3IJXVe9vV-XgtZn0Rbt3YrGxsOE6", "modelo_imagen.keras")
+download_model_gdrive("1v3UjiUkyTCUiZuKopGm113DMaEuGyr2a", "modelo_diametro.keras")
+download_model_gdrive("1nhZORXhSgCo06xIR7ZmAUrmBHVkf08oS", "modelo_dermascan.keras")
 
-# --- Cargar modelos con nombres correctos ---
+# --- Cargar modelos ---
 cnn_image_model = tf.keras.models.load_model("modelo_imagen.keras")
 diameter_model = tf.keras.models.load_model("modelo_diametro.keras")
 combined_model = tf.keras.models.load_model("modelo_dermascan.keras")
