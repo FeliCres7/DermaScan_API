@@ -63,29 +63,36 @@ def process_image(img_input: str):
 @app.post("/predict")
 async def predict(data: InputData):
     try:
-        logging.info(f"Datos recibidos: image={'presente' if data.image else None}")
+        print("\n===== 📥 REQUEST RECIBIDO EN /predict =====")
+        print("¿Imagen presente?:", "SI" if data.image else "NO")
+        if data.image:
+            print("Primeros 80 chars:", data.image[:80])
 
         if not data.image:
             raise HTTPException(status_code=400, detail="No se envió ninguna imagen")
 
-        # Procesar imagen
-        logging.info("Procesando imagen...")
+        print("Procesando imagen...")
         img_arr = process_image(data.image)
 
-        logging.info("Ejecutando predicción...")
+        print("📸 Imagen procesada correctamente. Shape:", img_arr.shape)
+
+        print("Ejecutando predicción...")
         raw_pred = modelo.predict(img_arr)[0][0]
 
         riesgo = float(raw_pred * 99)
+
+        print("🤖 RAW PRED:", raw_pred)
+        print("📊 RIESGO:", riesgo)
 
         resultado = {
             "riesgo": round(riesgo, 2)
         }
 
-        logging.info(f"Resultado final: {resultado}")
+        print("Resultado final:", resultado)
         return resultado
 
     except Exception as e:
-        logging.error(f"Error en /predict: {str(e)}", exc_info=True)
+        print("❌ ERROR EN /predict:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
