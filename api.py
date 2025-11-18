@@ -54,7 +54,7 @@ def process_image(img_input: str):
             img_bytes = base64.b64decode(base64_data)
             img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
-        img = img.resize((224, 224))
+        img = img.resize((128, 128))
         img_arr = np.array(img) / 255.0
         return np.expand_dims(img_arr, axis=0)
 
