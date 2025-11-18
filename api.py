@@ -34,7 +34,9 @@ MODEL_PATH = os.path.join(MODEL_DIR, "ham10000_model.keras")
 # Cargar modelo único
 logging.info("Cargando modelo único...")
 modelo = load_model(MODEL_PATH)
+modelo.summary()  # <<-- AGREGÁ ESTO
 logging.info("Modelo cargado correctamente.")
+
 
 # Formato de entrada (solo imagen ahora)
 class InputData(BaseModel):
